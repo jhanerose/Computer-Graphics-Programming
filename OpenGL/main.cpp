@@ -12,7 +12,7 @@
 //
 //  This project must contain exactly ONE .cpp file with a main() function.
 // =============================================================================
-
+#define GLEW_STATIC
 #include <stdio.h>
 #include <string.h>
 
@@ -44,7 +44,7 @@ layout (location = 0) in vec3 pos;                               \n\
                                                                  \n\
 void main()                                                      \n\
 {                                                                \n\
-    gl_Position = vec4(0.4 * pos.x, 0.4 * pos.y, pos.z, 1.0);    \n\
+    gl_Position = vec4(0.75 * pos.x, 0.75 * pos.y, pos.z, 1.0);    \n\
 }";
 
 // -----------------------------------------------------------------------------
@@ -61,7 +61,7 @@ out vec4 colour;                                                 \n\
                                                                  \n\
 void main()                                                      \n\
 {                                                                \n\
-    colour = vec4(1.0, 0.0, 0.0, 1.0);                           \n\
+    colour = vec4(0.111, 0.222, 1.0, 1.0);                           \n\
 }";
 
 // -----------------------------------------------------------------------------
@@ -73,9 +73,9 @@ void CreateTriangle()
     // The screen runs -1 to 1 on both axes, with 0,0 in the middle.
     // >>> TASK 2 lives here: replace these three corners with your own. <<<
     GLfloat vertices[] = {
-        -1.0f, -1.0f, 0.0f,   // bottom left
-         1.0f, -1.0f, 0.0f,   // bottom right
-         0.0f,  1.0f, 0.0f    // top middle
+         0.2f,  0.7f, 0.0f,    // bottom left
+        -0.6f, -0.3f, 0.0f,    // bottom right
+         0.8f, -0.8f, 0.0f,    // top middle 
     };
 
     // Step 1 & 2: make a VAO and bind it. Everything after this is
