@@ -274,15 +274,18 @@ int main()
 
 // =============================================================================
 //  LAB ACTIVITY - MAKE IT YOURS
+//  SADICON, JHANE ROSE U. -> 24-2038-129
 // =============================================================================
-//  Every task is seeded from something only you have, so no two submissions
-//  should look alike. Write your numbers down as you go, you hand them in.
 //
 //  TASK 1 - YOUR COLOUR                         [edit fShader, near the top]
 //    Take the last three digits of your student number.
 //    Divide each by 9 to get a value from 0.0 to 1.0. Those are R, G and B.
 //    If a digit is 0, use 0.2 instead, or you will draw black on black.
-//    Example: student 2023-01847 -> digits 8, 4, 7 -> 0.89, 0.44, 0.78
+//    Last three digits: 1, 2, 9
+//    R = 1 / 9 = 0.111
+//    G = 2 / 9 = 0.222
+//    B = 9 / 9 = 1.0
+//    Resulting colour vector: colour = vec4(0.111, 0.222, 1.0, 1.0);
 //
 //  TASK 2 - YOUR TRIANGLE                  [edit vertices[] in CreateTriangle]
 //    Replace the three corners with your own. Rules:
@@ -290,22 +293,34 @@ int main()
 //      - no two corners may share the same x value
 //      - the shape must not be symmetric
 //    Sketch it on the -1..1 grid first, then check the render matches.
+//    My three unique, asymmetrical vertices inside the -1.0 to 1.0 grid:
+//    Vertex 1 (Top):           0.2f,  0.7f, 0.0f
+//    Vertex 2 (Bottom Left):  -0.6f, -0.3f, 0.0f
+//    Vertex 3 (Bottom Right):  0.8f, -0.8f, 0.0f
 //
 //  TASK 3 - YOUR SCALE                          [edit vShader, near the top]
-//    Replace both 0.4 values with (your birth month / 12).
-//    March = 3/12 = 0.25.   December = 12/12 = 1.0.
-//    Predict how big your triangle will be BEFORE you build it.
+//    Birth month: 9 (September)
+//    Multiplier calculation: 9 / 12 = 0.75
+//    Prediction: The triangle will take up 75% of the screen space, making 
+//    it significantly larger than the default 0.4 size provided in the lab.
 //
 //  TASK 4 - YOUR BUG                                             [anywhere]
 //    Pick one line to delete or mistype. Write down the error you expect,
 //    then cause it and compare against what the console actually printed.
-//
-//  HAND IN
-//    Your three digits, your birth month, your three vertices,
-//    and a screenshot of each task.
+//    Line deleted: glAttachShader(theProgram, theShader); inside AddShader.
+//    Expected error: The shaders will compile, but the screen will be black 
+//    because they were never attached to the main shader program.
+//    Actual console log: "Error validating program: Validation Failed: No 
+//    vertex shader attached and no fragment shader attached."
 //
 //  STRETCH GOAL
-//    Add a second triangle mirrored across the y axis.
+//    Added second triangle mirrored across the y-axis.
 //    How many floats does the array hold now, and what changes in
 //    glDrawArrays? Do the shaders need to change at all?
+//    Mirrored Triangle Array Size: 18 floats (6 total vertices).
+//    glDrawArrays Changes: The vertex count parameter changed from 3 to 6 
+//    -> glDrawArrays(GL_TRIANGLES, 0, 6);
+//    Shader Changes: None. The shaders do not need to change because the 
+//    vertex shader processes one vertex at a time regardless of the total 
+//    count, and the fragment shader handles the resulting pixels.
 // =============================================================================
