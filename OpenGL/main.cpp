@@ -1,67 +1,94 @@
 // =============================================================================
 //  Computer Graphics Programming
-//  Lab Activity: Drawing Your First Triangle
+//  Lesson: Uniforms and Transformations
 //  University of Perpetual Help System DALTA - College of Computer Studies
 //
-//  Goal: draw one red triangle using a VAO, a VBO, and a pair of GLSL shaders.
+//  This is the finished lesson code and the STARTING POINT for the lab
+//  activity at the bottom of this file. Build it, run it, make sure you get a
+//  red triangle sliding, spinning and pulsing. Only then start the activity.
+//
 //  Build (Visual Studio Community, x64):
 //    Linker -> Input:  opengl32.lib  glfw3.lib  glew32.lib
 //    Copy glew32.dll into the same folder as the built .exe
-//    Do NOT define GLEW_STATIC. The static glew32s.lib is built against a
-//    different C runtime than glfw3.lib, which causes an MSVCRT/LIBCMT clash.
+//    GLM 1.0.3 is header-only: download it from github.com/g-truc/glm and
+//    drop the inner glm folder into your include directory. Nothing to link.
+//    define GLEW_STATIC.
 //
 //  This project must contain exactly ONE .cpp file with a main() function.
 // =============================================================================
+
 #define GLEW_STATIC
 #include <stdio.h>
 #include <string.h>
+#include <cmath>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 // Window size
 const GLint WIDTH = 800, HEIGHT = 600;
 
-// OpenGL never hands you the object itself. It hands you an ID and keeps
-// the real object in graphics memory. These three IDs are all we need today.
-GLuint VAO, VBO, shader;
+// glm::rotate wants RADIANS. We think in degrees, so we convert.
+const float toRadians = 3.14159265f / 180.0f;
+
+// OpenGL hands back IDs, not objects. These four are all we need.
+GLuint VAO, VBO, shader, uniformModel, uniformYShift;
+
+// --- Animation state: plain C++ bookkeeping, never touches OpenGL directly ---
+
+// Sliding left and right
+bool  direction = true;      // true = moving right
+float triOffset = 0.0f;      // current position
+float triMaxOffset = 0.40f;   // Adapted to reference animation value
+float triIncrement = 0.0005f;   // distance added each frame
+
+// Spinning
+float curAngle = 0.000f;     // Starting degrees
+float spinIncrement = 0.05f; // Adapted to reference animation value
+
+// Pulsing
+bool  sizeDirection = true;     // true = growing
+float curSize = 0.4f;           // Adapted to reference animation value
+float maxSize = 0.8f;           // Adapted to reference animation value
+float minSize = 0.1f;           // Adapted to reference animation value
 
 // -----------------------------------------------------------------------------
-//  VERTEX SHADER  (Stage 2 of the pipeline - runs once per vertex)
-//  >>> TASK 3 lives here: the two 0.4 values below are your scale. <<<
+//  VERTEX SHADER  (Stage 2 - runs once per vertex)
 // -----------------------------------------------------------------------------
-//  Stored as a plain string because the driver compiles GLSL at runtime.
-//  Each line needs \n so GLSL sees separate lines, and a trailing backslash
-//  so C++ continues the string onto the next line.
-//
-//  Note: your editor will NOT underline mistakes in here. Every error in this
-//  string only shows up when the program runs.
-// -----------------------------------------------------------------------------
-static const char* vShader = "                                  \n\
-#version 330                                                     \n\
+static const char* vShader = "                                   \n\
+#version 460                                                     \n\
                                                                  \n\
 layout (location = 0) in vec3 pos;                               \n\
                                                                  \n\
+uniform mat4 model;                                              \n\
+uniform float yShift;                                            \n\
+                                                                 \n\
+out vec3 vertexColor;                                            \n\
+                                                                 \n\
 void main()                                                      \n\
 {                                                                \n\
-    gl_Position = vec4(0.75 * pos.x, 0.75 * pos.y, pos.z, 1.0);    \n\
+    gl_Position = model * vec4(pos.x, pos.y + yShift, pos.z, 1.0); \n\
+    // Map local coordinates (-0.5 to 0.5) to RGB colors (0.0 to 1.0) \n\
+    vertexColor = vec3(pos.x + 0.5, pos.y + 0.5, 0.8);           \n\
 }";
 
 // -----------------------------------------------------------------------------
-//  FRAGMENT SHADER  (Stage 8 of the pipeline - runs once per fragment)
-//  >>> TASK 1 lives here: the vec4 below is your colour. <<<
-// -----------------------------------------------------------------------------
-//  Unlike gl_Position, this output is one you name yourself. A fragment shader
-//  with a single output is assumed to be the pixel colour, whatever you call it.
+//  FRAGMENT SHADER  (Stage 8 - runs once per fragment)
 // -----------------------------------------------------------------------------
 static const char* fShader = "                                   \n\
-#version 330                                                     \n\
+#version 460                                                     \n\
                                                                  \n\
+in vec3 vertexColor;                                             \n\
 out vec4 colour;                                                 \n\
                                                                  \n\
 void main()                                                      \n\
 {                                                                \n\
-    colour = vec4(0.111, 0.222, 1.0, 1.0);                           \n\
+    // Apply the interpolated gradient color instead of solid red  \n\
+    colour = vec4(vertexColor, 1.0);                             \n\
 }";
 
 // -----------------------------------------------------------------------------
@@ -69,43 +96,56 @@ void main()                                                      \n\
 // -----------------------------------------------------------------------------
 void CreateTriangle()
 {
-    // Nine floats, read three at a time as x, y, z.
-    // The screen runs -1 to 1 on both axes, with 0,0 in the middle.
-    // >>> TASK 2 lives here: replace these three corners with your own. <<<
-    GLfloat vertices[] = {
-         0.2f,  0.7f, 0.0f,    // bottom left
-        -0.6f, -0.3f, 0.0f,    // bottom right
-         0.8f, -0.8f, 0.0f,    // top middle 
-    };
+    // >>> ACTIVITY TASK 1 lives here: replace these with your polygon. <<<
+    const int sides = 8; // octagon
+    GLfloat vertices[sides * 3 * 3];
 
-    // Step 1 & 2: make a VAO and bind it. Everything after this is
-    // recorded against whichever VAO is currently bound.
+    // one triangle per side, all from the centre
+    float step = 360.0f / sides;
+    int idx = 0;
+
+    for (int i = 0; i < sides; ++i)
+    {
+        // Calculate trigonometry once per loop iteration
+        float currentX = 0.5f * cos(i * step * toRadians);
+        float currentY = 0.5f * sin(i * step * toRadians);
+        float nextX = 0.5f * cos((i + 1) * step * toRadians);
+        float nextY = 0.5f * sin((i + 1) * step * toRadians);
+
+        // 1. Centre point
+        vertices[idx++] = 0.0f;
+        vertices[idx++] = 0.0f;
+        vertices[idx++] = 0.0f;
+
+        // 2. Rim point i
+        vertices[idx++] = currentX;
+        vertices[idx++] = currentY;
+        vertices[idx++] = 0.0f;
+
+        // 3. Rim point i+1 
+        vertices[idx++] = nextX;
+        vertices[idx++] = nextY;
+        vertices[idx++] = 0.0f;
+    }
+
     glGenVertexArrays(1, &VAO);
     glBindVertexArray(VAO);
 
-    // Step 3 & 4: make a VBO and bind it to the array-buffer target.
     glGenBuffers(1, &VBO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
 
-    // Step 5: copy the data into graphics memory.
-    // GL_STATIC_DRAW = set once, drawn many times.
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    // Step 6: describe the layout.
-    //   0         -> matches layout (location = 0) in the vertex shader
-    //   3         -> three values per vertex (x, y, z)
-    //   GL_FLOAT  -> the values are GLfloats
-    //   GL_FALSE  -> do not normalise them
-    //   0         -> stride: data is tightly packed, no gaps to skip
-    //   0         -> offset: start at the very first value
+    //   0        -> matches layout (location = 0) in the vertex shader
+    //   3        -> three values per vertex (x, y, z)
+    //   GL_FLOAT -> the values are GLfloats
+    //   GL_FALSE -> do not normalise them
+    //   0        -> stride: tightly packed, no gaps to skip
+    //   0        -> offset: start at the very first value
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-    // Step 7: switch attribute 0 on, so the shader actually receives it.
     glEnableVertexAttribArray(0);
 
-    // Step 8: unbind, so the next object cannot write into this VAO.
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-
     glBindVertexArray(0);
 }
 
@@ -114,24 +154,19 @@ void CreateTriangle()
 // -----------------------------------------------------------------------------
 void AddShader(GLuint theProgram, const char* shaderCode, GLenum shaderType)
 {
-    // Create an empty shader of the requested type.
     GLuint theShader = glCreateShader(shaderType);
 
-    // glShaderSource expects arrays, so we build one-element arrays.
     const GLchar* theCode[1];
     theCode[0] = shaderCode;
 
     GLint codeLength[1];
-    codeLength[0] = (GLint)strlen(shaderCode);   // this is why we need string.h
+    codeLength[0] = (GLint)strlen(shaderCode);
 
-    // Hand the GLSL text to the shader object, then compile it.
     glShaderSource(theShader, 1, theCode, codeLength);
     glCompileShader(theShader);
 
-    // --- Error check: did THIS ONE shader compile? ---
-    // Shader functions (glGetShaderiv / glGetShaderInfoLog) report on a single
-    // shader. Program functions report on the linked whole. Mixing them up is
-    // the most common copy-paste bug in this lesson.
+    // Shader functions report on ONE shader. Program functions report on the
+    // linked whole. Mixing them up is the classic copy-paste bug.
     GLint result = 0;
     GLchar eLog[1024] = { 0 };
 
@@ -143,22 +178,18 @@ void AddShader(GLuint theProgram, const char* shaderCode, GLenum shaderType)
         return;
     }
 
-    // Only attach once it has compiled cleanly.
     glAttachShader(theProgram, theShader);
 }
 
 // -----------------------------------------------------------------------------
-//  CompileShaders - builds the shader program and links both shaders into it
+//  CompileShaders - builds the program, links it, and finds the uniform
 // -----------------------------------------------------------------------------
 void CompileShaders()
 {
-    // The program object comes first, and it starts empty.
     shader = glCreateProgram();
 
     if (!shader)
     {
-        // A failed program leaves you with ID 0, and every later call quietly
-        // does nothing. Catching it here saves you a blank screen with no clue.
         printf("Error creating shader program!\n");
         return;
     }
@@ -169,9 +200,6 @@ void CompileShaders()
     GLint result = 0;
     GLchar eLog[1024] = { 0 };
 
-    // Link: creates the executables on the graphics card and joins the shaders.
-    // This is where mismatches show up, e.g. a vertex output with no matching
-    // fragment input.
     glLinkProgram(shader);
     glGetProgramiv(shader, GL_LINK_STATUS, &result);
     if (!result)
@@ -181,8 +209,6 @@ void CompileShaders()
         return;
     }
 
-    // Validate: is the linked program valid for the context we are running in?
-    // Optional, but it catches problems that otherwise appear as a blank window.
     glValidateProgram(shader);
     glGetProgramiv(shader, GL_VALIDATE_STATUS, &result);
     if (!result)
@@ -191,6 +217,18 @@ void CompileShaders()
         printf("Error validating program: '%s'\n", eLog);
         return;
     }
+
+    // Find the uniform by NAME. This must happen AFTER linking.
+    uniformModel = glGetUniformLocation(shader, "model");
+    uniformYShift = glGetUniformLocation(shader, "yShift");
+}
+
+// -----------------------------------------------------------------------------
+// Callback function for dynamic window resizing
+// -----------------------------------------------------------------------------
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    glViewport(0, 0, width, height);
 }
 
 // -----------------------------------------------------------------------------
@@ -198,7 +236,6 @@ void CompileShaders()
 // -----------------------------------------------------------------------------
 int main()
 {
-    // --- Window setup (from the previous lesson) ---
     if (!glfwInit())
     {
         printf("GLFW initialisation failed!\n");
@@ -206,13 +243,13 @@ int main()
         return 1;
     }
 
-    // Ask for OpenGL 3.3, core profile (no deprecated features).
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    // Ask for OpenGL 4.6 core profile, the latest version of the spec.
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
-    GLFWwindow* mainWindow = glfwCreateWindow(WIDTH, HEIGHT, "My First Triangle", NULL, NULL);
+    GLFWwindow* mainWindow = glfwCreateWindow(WIDTH, HEIGHT, "Uniforms and Transformations", NULL, NULL);
     if (!mainWindow)
     {
         printf("GLFW window creation failed!\n");
@@ -220,13 +257,14 @@ int main()
         return 1;
     }
 
-    // Get the real framebuffer size (not the same as window size on hi-dpi screens).
+    // Set the resize callback right after creating the window
+    glfwSetFramebufferSizeCallback(mainWindow, framebuffer_size_callback);
+
     int bufferWidth, bufferHeight;
     glfwGetFramebufferSize(mainWindow, &bufferWidth, &bufferHeight);
 
     glfwMakeContextCurrent(mainWindow);
 
-    // GLEW must be initialised AFTER a context exists.
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK)
     {
@@ -247,22 +285,58 @@ int main()
     {
         glfwPollEvents();
 
-        // Black background, so the red triangle stands out.
+        // ---- Update the animation values ----
+
+        // Slide left and right, turning around at the limits.
+        if (direction) { triOffset += triIncrement; }
+        else { triOffset -= triIncrement; }
+
+        if (std::abs(triOffset) >= triMaxOffset)
+        {
+            direction = !direction;   // flip the flag in one line
+        }
+
+        // Spin using your specific ID increment
+        curAngle += spinIncrement;
+        if (curAngle >= 360.0f)
+        {
+            curAngle -= 360.0f;
+        }
+
+        // Pulse. Either bound flips the direction, so one if handles both.
+        if (sizeDirection) { curSize += 0.0001f; }
+        else { curSize -= 0.0001f; }
+
+        if (curSize >= maxSize || curSize <= minSize)
+        {
+            sizeDirection = !sizeDirection;
+        }
+
+        // ---- Draw ----
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(shader);
 
+        // TASK 2: Send your yShift value across (-0.05f) every frame
+        glUniform1f(uniformYShift, -0.05f);
+
+        // Start from the identity matrix: the do-nothing transform.
+        glm::mat4 model = glm::mat4(1.0f);
+
+        // ORDER MATTERS. Written top to bottom, these apply in reverse.
+        model = glm::translate(model, glm::vec3(triOffset, 0.0f, 0.0f));
+        model = glm::rotate(model, curAngle * toRadians, glm::vec3(0.0f, 0.0f, 1.0f));
+        model = glm::scale(model, glm::vec3(curSize, curSize, 1.0f));
+
+        // Hand the matrix to the shader.
+        glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
+
         glBindVertexArray(VAO);
-
-        // GL_TRIANGLES -> read the vertices in threes and fill them in
-        // 0            -> start at the first vertex
-        // 3            -> draw three vertices
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-
+        glDrawArrays(GL_TRIANGLES, 0, 24);
         glBindVertexArray(0);
 
-        glUseProgram(0);   // 0 means "no shader"
+        glUseProgram(0);
 
         glfwSwapBuffers(mainWindow);
     }
@@ -273,54 +347,27 @@ int main()
 }
 
 // =============================================================================
-//  LAB ACTIVITY - MAKE IT YOURS
-//  SADICON, JHANE ROSE U. -> 24-2038-129
+//  LAB ACTIVITY - YOUR OWN SHAPE, MOVING
 // =============================================================================
+//  The program above is your STARTING POINT. Get it running first.
+//  Every value below comes from the digits of YOUR student number, so no two
+//  submissions should look alike. Write your six numbers down before you code.
 //
-//  TASK 1 - YOUR COLOUR                         [edit fShader, near the top]
-//    Take the last three digits of your student number.
-//    Divide each by 9 to get a value from 0.0 to 1.0. Those are R, G and B.
-//    If a digit is 0, use 0.2 instead, or you will draw black on black.
-//    Last three digits: 1, 2, 9
-//    R = 1 / 9 = 0.111
-//    G = 2 / 9 = 0.222
-//    B = 9 / 9 = 1.0
-//    Resulting colour vector: colour = vec4(0.111, 0.222, 1.0, 1.0);
+//  -------------------------------------------------------------------------
+//  STEP 0 - NUMBER YOUR DIGITS
+//  -------------------------------------------------------------------------
+//    Ignore the dashes and number every digit left to right.
 //
-//  TASK 2 - YOUR TRIANGLE                  [edit vertices[] in CreateTriangle]
-//    Replace the three corners with your own. Rules:
-//      - every value stays between -1.0 and 1.0
-//      - no two corners may share the same x value
-//      - the shape must not be symmetric
-//    Sketch it on the -1..1 grid first, then check the render matches.
-//    My three unique, asymmetrical vertices inside the -1.0 to 1.0 grid:
-//    Vertex 1 (Top):           0.2f,  0.7f, 0.0f
-//    Vertex 2 (Bottom Left):  -0.6f, -0.3f, 0.0f
-//    Vertex 3 (Bottom Right):  0.8f, -0.8f, 0.0f
+//        2  4  2  0  3  8  1  2  9          <- SADICON, JHANE ROSE U.: 24-2038-129
+//       d1 d2 d3 d4 d5 d6 d7 d8 d9
 //
-//  TASK 3 - YOUR SCALE                          [edit vShader, near the top]
-//    Birth month: 9 (September)
-//    Multiplier calculation: 9 / 12 = 0.75
-//    Prediction: The triangle will take up 75% of the screen space, making 
-//    it significantly larger than the default 0.4 size provided in the lab.
+//    Now read off your six values:
 //
-//  TASK 4 - YOUR BUG                                             [anywhere]
-//    Pick one line to delete or mistype. Write down the error you expect,
-//    then cause it and compare against what the console actually printed.
-//    Line deleted: glAttachShader(theProgram, theShader); inside AddShader.
-//    Expected error: The shaders will compile, but the screen will be black 
-//    because they were never attached to the main shader program.
-//    Actual console log: "Error validating program: Validation Failed: No 
-//    vertex shader attached and no fragment shader attached."
+//       sides    = 4 + (9 mod 5)          -> 8
+//       travel   = 0.3 + 2 * 0.05         -> 0.40
+//       spin     = (d7 + 1) / 1000        -> 0.002
+//       minSize  = 0.1 + d1 * 0.05        -> 0.20
+//       maxSize  = minSize + 0.3          -> 0.50
+//       yShift   = (d2 - 5) / 20          -0.05
 //
-//  STRETCH GOAL
-//    Added second triangle mirrored across the y-axis.
-//    How many floats does the array hold now, and what changes in
-//    glDrawArrays? Do the shaders need to change at all?
-//    Mirrored Triangle Array Size: 18 floats (6 total vertices).
-//    glDrawArrays Changes: The vertex count parameter changed from 3 to 6 
-//    -> glDrawArrays(GL_TRIANGLES, 0, 6);
-//    Shader Changes: None. The shaders do not need to change because the 
-//    vertex shader processes one vertex at a time regardless of the total 
-//    count, and the fragment shader handles the resulting pixels.
-// =============================================================================
+//    Every digit 0-9 gives a safe value. There are no special cases.
