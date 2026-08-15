@@ -17,5 +17,6 @@ OpenGL Libraries/
 └── lib/
 ```
 
-© 2026 SADICON, Jhane Rose U.
-       24-2038-129
+24-2038-129       
+© SADICON, Jhane Rose U.
+
