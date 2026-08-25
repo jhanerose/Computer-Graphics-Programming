@@ -12,12 +12,11 @@
 //    Copy glew32.dll into the same folder as the built .exe
 //    GLM 1.0.3 is header-only: download it from github.com/g-truc/glm and
 //    drop the inner glm folder into your include directory. Nothing to link.
-//    define GLEW_STATIC.
+//    Do NOT define GLEW_STATIC.
 //
 //  This project must contain exactly ONE .cpp file with a main() function.
 // =============================================================================
 
-#define GLEW_STATIC
 #include <stdio.h>
 #include <string.h>
 #include <cmath>
@@ -33,10 +32,6 @@
 const GLint WIDTH = 800, HEIGHT = 600;
 
 // glm::rotate wants RADIANS. We think in degrees, so we convert.
-const float toRadians = 3.14159265f / 180.0f;
-
-// OpenGL hands back IDs, not objects. These four are all we need.
-GLuint VAO, VBO, shader, uniformModel, uniformYShift;
 // Write your angle in degrees, then multiply by this.
 const float toRadians = 3.14159265f / 180.0f;
 
@@ -48,23 +43,6 @@ GLuint VAO, VBO, shader, uniformModel;
 // Sliding left and right
 bool  direction = true;      // true = moving right
 float triOffset = 0.0f;      // current position
-float triMaxOffset = 0.40f;   // Adapted to reference animation value
-float triIncrement = 0.0005f;   // distance added each frame
-
-// Spinning
-float curAngle = 0.000f;     // Starting degrees
-float spinIncrement = 0.05f; // Adapted to reference animation value
-
-// Pulsing
-bool  sizeDirection = true;     // true = growing
-float curSize = 0.4f;           // Adapted to reference animation value
-float maxSize = 0.8f;           // Adapted to reference animation value
-float minSize = 0.1f;           // Adapted to reference animation value
-
-// -----------------------------------------------------------------------------
-//  VERTEX SHADER  (Stage 2 - runs once per vertex)
-// -----------------------------------------------------------------------------
-static const char* vShader = "                                   \n\
 float triMaxOffset = 0.7f;      // turn around at +/- this
 float triIncrement = 0.0005f;   // distance added each frame
 
@@ -92,15 +70,6 @@ static const char* vShader = "                                  \n\
 layout (location = 0) in vec3 pos;                               \n\
                                                                  \n\
 uniform mat4 model;                                              \n\
-uniform float yShift;                                            \n\
-                                                                 \n\
-out vec3 vertexColor;                                            \n\
-                                                                 \n\
-void main()                                                      \n\
-{                                                                \n\
-    gl_Position = model * vec4(pos.x, pos.y + yShift, pos.z, 1.0); \n\
-    // Map local coordinates (-0.5 to 0.5) to RGB colors (0.0 to 1.0) \n\
-    vertexColor = vec3(pos.x + 0.5, pos.y + 0.5, 0.8);           \n\
                                                                  \n\
 void main()                                                      \n\
 {                                                                \n\
@@ -113,13 +82,11 @@ void main()                                                      \n\
 static const char* fShader = "                                   \n\
 #version 460                                                     \n\
                                                                  \n\
-in vec3 vertexColor;                                             \n\
 out vec4 colour;                                                 \n\
                                                                  \n\
 void main()                                                      \n\
 {                                                                \n\
-    // Apply the interpolated gradient color instead of solid red  \n\
-    colour = vec4(vertexColor, 1.0);                             \n\
+    colour = vec4(1.0, 0.0, 0.0, 1.0);                           \n\
 }";
 
 // -----------------------------------------------------------------------------
@@ -127,37 +94,6 @@ void main()                                                      \n\
 // -----------------------------------------------------------------------------
 void CreateTriangle()
 {
-    // >>> ACTIVITY TASK 1 lives here: replace these with your polygon. <<<
-    const int sides = 8; // octagon
-    GLfloat vertices[sides * 3 * 3];
-
-    // one triangle per side, all from the centre
-    float step = 360.0f / sides;
-    int idx = 0;
-
-    for (int i = 0; i < sides; ++i)
-    {
-        // Calculate trigonometry once per loop iteration
-        float currentX = 0.5f * cos(i * step * toRadians);
-        float currentY = 0.5f * sin(i * step * toRadians);
-        float nextX = 0.5f * cos((i + 1) * step * toRadians);
-        float nextY = 0.5f * sin((i + 1) * step * toRadians);
-
-        // 1. Centre point
-        vertices[idx++] = 0.0f;
-        vertices[idx++] = 0.0f;
-        vertices[idx++] = 0.0f;
-
-        // 2. Rim point i
-        vertices[idx++] = currentX;
-        vertices[idx++] = currentY;
-        vertices[idx++] = 0.0f;
-
-        // 3. Rim point i+1 
-        vertices[idx++] = nextX;
-        vertices[idx++] = nextY;
-        vertices[idx++] = 0.0f;
-    }
     // Three points, read three floats at a time as x, y, z.
     // The screen runs -1 to 1 on both axes, with 0,0 in the middle.
     //
@@ -186,6 +122,7 @@ void CreateTriangle()
     glEnableVertexAttribArray(0);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+
     glBindVertexArray(0);
 }
 
@@ -258,17 +195,6 @@ void CompileShaders()
         return;
     }
 
-    // Find the uniform by NAME. This must happen AFTER linking.
-    uniformModel = glGetUniformLocation(shader, "model");
-    uniformYShift = glGetUniformLocation(shader, "yShift");
-}
-
-// -----------------------------------------------------------------------------
-// Callback function for dynamic window resizing
-// -----------------------------------------------------------------------------
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-    glViewport(0, 0, width, height);
     // Find the uniform by NAME. This must happen AFTER linking, because before
     // that the variable does not have a location yet.
     // A typo here returns -1 and then fails silently. Spell it exactly.
@@ -300,9 +226,6 @@ int main()
         glfwTerminate();
         return 1;
     }
-
-    // Set the resize callback right after creating the window
-    glfwSetFramebufferSizeCallback(mainWindow, framebuffer_size_callback);
 
     int bufferWidth, bufferHeight;
     glfwGetFramebufferSize(mainWindow, &bufferWidth, &bufferHeight);
@@ -341,8 +264,6 @@ int main()
             direction = !direction;   // flip the flag in one line
         }
 
-        // Spin using your specific ID increment
-        curAngle += spinIncrement;
         // Spin. The wrap at 360 is not required, it just stops the
         // number growing without limit if the program runs for hours.
         curAngle += 0.05f;
@@ -366,22 +287,6 @@ int main()
 
         glUseProgram(shader);
 
-        // TASK 2: Send your yShift value across (-0.05f) every frame
-        glUniform1f(uniformYShift, -0.05f);
-
-        // Start from the identity matrix: the do-nothing transform.
-        glm::mat4 model = glm::mat4(1.0f);
-
-        // ORDER MATTERS. Written top to bottom, these apply in reverse.
-        model = glm::translate(model, glm::vec3(triOffset, 0.0f, 0.0f));
-        model = glm::rotate(model, curAngle * toRadians, glm::vec3(0.0f, 0.0f, 1.0f));
-        model = glm::scale(model, glm::vec3(curSize, curSize, 1.0f));
-
-        // Hand the matrix to the shader.
-        glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
-
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 24);
         // Start from the identity matrix: the do-nothing transform.
         // NOTE the 1.0f. Since GLM 0.9.9, including the current 1.0.3,
         // a bare glm::mat4 model; is UNINITIALISED and full of garbage.
@@ -422,25 +327,6 @@ int main()
 //  The program above is your STARTING POINT. Get it running first.
 //  Every value below comes from the digits of YOUR student number, so no two
 //  submissions should look alike. Write your six numbers down before you code.
-//
-//  -------------------------------------------------------------------------
-//  STEP 0 - NUMBER YOUR DIGITS
-//  -------------------------------------------------------------------------
-//    Ignore the dashes and number every digit left to right.
-//
-//        2  4  2  0  3  8  1  2  9          <- SADICON, JHANE ROSE U.: 24-2038-129
-//       d1 d2 d3 d4 d5 d6 d7 d8 d9
-//
-//    Now read off your six values:
-//
-//       sides    = 4 + (9 mod 5)          -> 8
-//       travel   = 0.3 + 2 * 0.05         -> 0.40
-//       spin     = (d7 + 1) / 1000        -> 0.002
-//       minSize  = 0.1 + d1 * 0.05        -> 0.20
-//       maxSize  = minSize + 0.3          -> 0.50
-//       yShift   = (d2 - 5) / 20          -0.05
-//
-//    Every digit 0-9 gives a safe value. There are no special cases.
 //
 //  -------------------------------------------------------------------------
 //  STEP 0 - NUMBER YOUR DIGITS
